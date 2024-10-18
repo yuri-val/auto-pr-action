@@ -26,14 +26,14 @@ jobs:
         id: get_base_version
         shell: bash
         run: |
-          BASE_VERSION=$(echo ${{ steps.get_tag.outputs.TAG }} | cut -d. -f1)
+          BASE_VERSION=$(echo "${{ steps.get_tag.outputs.TAG }}" | cut -d. -f1)
           echo "BASE_VERSION=${BASE_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Get previous tag
         id: get_previous_tag
         shell: bash
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ steps.get_tag.outputs.TAG }}^ || echo "")
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${{ steps.get_tag.outputs.TAG }}"^ || echo "")
           echo "PREVIOUS_TAG=${PREVIOUS_TAG}" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
@@ -41,9 +41,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s" ${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}..${{ steps.get_tag.outputs.TAG }})
+            CHANGELOG=$(git log --pretty=format:"- %s" "${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}..${{ steps.get_tag.outputs.TAG }}")
           else
-            CHANGELOG=$(git log --pretty=format:"- %s" ${{ steps.get_tag.outputs.TAG }})
+            CHANGELOG=$(git log --pretty=format:"- %s" "${{ steps.get_tag.outputs.TAG }}")
           fi
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
@@ -54,13 +54,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const baseVersion = '${{ steps.get_base_version.outputs.BASE_VERSION }}';
-            const fullVersion = '${{ steps.get_tag.outputs.TAG }}';
+            const baseVersion = `${{ steps.get_base_version.outputs.BASE_VERSION }}`;
+            const fullVersion = `${{ steps.get_tag.outputs.TAG }}`;
             const changelog = `${{ steps.generate_changelog.outputs.CHANGELOG }}`;
             
             try {
               // Try to get the existing release
-              await github.rest.repos.getReleaseByTag({
+              const { data: release } = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 tag: baseVersion
@@ -70,7 +70,7 @@ jobs:
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.data.id,
+                release_id: release.id,
                 tag_name: baseVersion,
                 name: `Base Release ${baseVersion}`,
                 body: `This is the base release for ${baseVersion}. Latest version: ${fullVersion}\n\nChangelog:\n${changelog}`,
@@ -95,14 +95,16 @@ jobs:
             }
 
       - name: Create Full Version Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
+          files: |
+            # Add any files you want to include in the release
           tag_name: ${{ steps.get_tag.outputs.TAG }}
-          release_name: Release ${{ steps.get_tag.outputs.TAG }}
+          name: Release ${{ steps.get_tag.outputs.TAG }}
           body: |
             Changes in this Release:
             ${{ steps.generate_changelog.outputs.CHANGELOG }}
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
