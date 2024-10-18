@@ -123,6 +123,9 @@ runs:
     - name: Create or Update Pull Request and Add Reviewers
       id: create_pr
       uses: actions/github-script@v6
+      env:
+        PR_TITLE: ${{ steps.set_release_title.outputs.title }}
+        PR_BODY: ${{ steps.generate_release_notes.outputs.description }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |
@@ -130,8 +133,8 @@ runs:
           const repo = context.repo.repo;
           const head = '${{ inputs.dev_branch }}';
           const base = '${{ steps.get_default_branch.outputs.branch }}';
-          const title = '${{ steps.set_release_title.outputs.title }}';
-          const body = `${{ steps.generate_release_notes.outputs.description }}`;
+          const title = process.env.PR_TITLE;
+          const body = process.env.PR_BODY;
           
           // Check if PR from dev to default branch already exists
           const { data: pulls } = await github.rest.pulls.list({
