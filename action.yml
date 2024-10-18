@@ -1,0 +1,210 @@
+# action.yml
+
+name: 'Auto PR from dev to default'
+description: 'Creates or updates a PR from dev to the default branch, generates descriptions using OpenAI API, and adds reviewers.'
+author: 'Your Name'
+inputs:
+  openai_api_key:
+    description: 'OpenAI API Key'
+    required: true
+  github_token:
+    description: 'GitHub (PAT) token with repo permissions'
+    required: true
+  dev_branch:
+    description: 'Development branch name'
+    required: false
+    default: 'dev'
+outputs:
+  pr_number:
+    description: 'The number of the pull request created or updated'
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.dev_branch }}
+
+    - name: Set up Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Get the default branch
+      id: get_default_branch
+      shell: bash
+      run: |
+        default_branch=$(git remote show origin | grep 'HEAD branch' | awk '{print $NF}')
+        echo "branch=${default_branch}" >> $GITHUB_OUTPUT
+
+    - name: Get the diff using custom script
+      id: get_diff
+      shell: bash
+      run: |
+        set -e
+        branch_from="${{ steps.get_default_branch.outputs.branch }}"
+        branch_to="${{ inputs.dev_branch }}"
+        echo "Branch from: $branch_from"
+        echo "Branch to: $branch_to"
+
+        git fetch --all
+
+        mkdir -p diff
+        output_file="diff/${branch_from:-main}-${branch_to}_$(date +'%Y%m%d_%H%M').diff"
+        echo "Output file: $output_file"
+
+        {
+          echo "Commits between $branch_from and $branch_to:"
+          echo "============================================"
+          git log origin/"$branch_from"..origin/"$branch_to" || echo "No commits found"
+          echo "--------------------------------------------"
+          echo "Git diff between $branch_from and $branch_to"
+          echo "============================================"
+          git diff origin/"$branch_from" origin/"$branch_to" || echo "No differences found"
+        } > "$output_file"
+
+        if [ -s "$output_file" ]; then
+          echo "diff_output<<EOF" >> $GITHUB_OUTPUT
+          cat "$output_file" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "diff_output=No changes detected between $branch_from and $branch_to" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate release description using OpenAI API
+      id: generate_release_notes
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        DIFF_OUTPUT: ${{ steps.get_diff.outputs.diff_output }}
+      shell: bash
+      run: |
+        prompt="**Instructions:**\n\nPlease generate a **Pull Request description** for the provided diff, following these guidelines:\n- Add appropriate emojis to the description.\n- Do **not** include the words \"Title\" and \"Description\" in your output.\n- Format your answer in **Markdown**."
+
+        escaped_prompt=$(echo "$prompt" | jq -Rs .)
+        escaped_diff=$(echo "$DIFF_OUTPUT" | jq -Rs .)
+
+        response=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $OPENAI_API_KEY" \
+          -d "{
+            \"model\": \"gpt-4o-mini\",
+            \"messages\": [
+              {
+                \"role\": \"system\",
+                \"content\": ${escaped_prompt}
+              },
+              {
+                \"role\": \"user\",
+                \"content\": ${escaped_diff}
+              }
+            ],
+            \"temperature\": 1,
+            \"max_tokens\": 2048,
+            \"top_p\": 1,
+            \"frequency_penalty\": 0,
+            \"presence_penalty\": 0
+          }")
+
+        description=$(echo "$response" | jq -r '.choices[0].message.content')
+        echo "description<<EOF" >> $GITHUB_OUTPUT
+        echo "$description" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Set Release Title
+      id: set_release_title
+      shell: bash
+      run: |
+        echo "title=Release v$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+
+    - name: Create or Update Pull Request and Add Reviewers
+      id: create_pr
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const head = '${{ inputs.dev_branch }}';
+          const base = '${{ steps.get_default_branch.outputs.branch }}';
+          const title = '${{ steps.set_release_title.outputs.title }}';
+          const body = `${{ steps.generate_release_notes.outputs.description }}`;
+          
+          // Check if PR from dev to default branch already exists
+          const { data: pulls } = await github.rest.pulls.list({
+            owner: owner,
+            repo: repo,
+            head: `${owner}:${head}`,
+            base: base,
+            state: 'open',
+          });
+
+          let prNumber;
+          let prAuthor;
+          if (pulls.length > 0) {
+            prNumber = pulls[0].number;
+            prAuthor = pulls[0].user.login;
+            console.log(`Updating existing PR #${prNumber}`);
+            await github.rest.pulls.update({
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber,
+              title: title,
+              body: body,
+            });
+          } else {
+            console.log('Creating new PR');
+            const { data: pr } = await github.rest.pulls.create({
+              owner: owner,
+              repo: repo,
+              head: head,
+              base: base,
+              title: title,
+              body: body,
+            });
+            prNumber = pr.number;
+            prAuthor = pr.user.login;
+          }
+
+          // Now, add reviewers
+          // First, get the list of committers to this PR
+          const { data: commits } = await github.rest.pulls.listCommits({
+            owner: owner,
+            repo: repo,
+            pull_number: prNumber,
+          });
+
+          const committersSet = new Set();
+          for (const commit of commits) {
+            if (commit.author && commit.author.login) {
+              committersSet.add(commit.author.login);
+            }
+          }
+
+          // Add the repo owner
+          committersSet.add(owner);
+
+          // Remove the PR author from reviewers
+          committersSet.delete(prAuthor);
+
+          // Remove the bot user (if present)
+          const botUser = 'github-actions[bot]';
+          committersSet.delete(botUser);
+
+          // Convert set to array
+          const reviewers = Array.from(committersSet);
+
+          console.log(`Adding reviewers: ${reviewers.join(', ')}`);
+
+          if (reviewers.length > 0) {
+            // Add reviewers to the PR
+            await github.rest.pulls.requestReviewers({
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber,
+              reviewers: reviewers,
+            });
+          } else {
+            console.log('No reviewers to add.');
+          }
+
+          core.setOutput('pr_number', prNumber);
