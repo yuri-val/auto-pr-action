@@ -31,7 +31,7 @@ To use this action in your workflow, add the following step:
 
 ```yaml
 - name: Auto PR from Dev to Default
-  uses: your-github-username/auto-pr-action@v1
+  uses: yuri-val/auto-pr-action@v1
   with:
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
     github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -39,6 +39,31 @@ To use this action in your workflow, add the following step:
 ```
 
 Make sure to set up the `OPENAI_API_KEY` secret in your repository settings.
+
+### Example Workflow Using Your Custom Action
+
+Create a workflow file in your repository (e.g., `.github/workflows/auto-pr.yml`):
+
+```yml
+name: Auto PR from dev to default
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  auto-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Auto PR Action
+        uses: yuri-val/auto-pr-action@v1.0.0
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.PAT_TOKEN }}
+          dev_branch: 'dev'  # Optional, defaults to 'dev'
+
+```
 
 ## How it works
 
