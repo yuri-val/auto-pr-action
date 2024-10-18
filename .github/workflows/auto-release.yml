@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get tag name
         id: get_tag
@@ -49,6 +50,14 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Create or update base version tag
+        shell: bash
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git tag -f "${{ steps.get_base_version.outputs.BASE_VERSION }}" "${GITHUB_SHA}"
+          git push origin --force "${{ steps.get_base_version.outputs.BASE_VERSION }}"
+
       - name: Create or Update Base Release
         uses: actions/github-script@v6
         with:
@@ -57,21 +66,24 @@ jobs:
             const baseVersion = `${{ steps.get_base_version.outputs.BASE_VERSION }}`;
             const fullVersion = `${{ steps.get_tag.outputs.TAG }}`;
             const changelog = `${{ steps.generate_changelog.outputs.CHANGELOG }}`;
-            
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tagName = baseVersion;
+
             try {
               // Try to get the existing release
               const { data: release } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: baseVersion
+                owner,
+                repo,
+                tag: tagName
               });
-              
+
               // If it exists, update it
               await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner,
+                repo,
                 release_id: release.id,
-                tag_name: baseVersion,
+                tag_name: tagName,
                 name: `Base Release ${baseVersion}`,
                 body: `This is the base release for ${baseVersion}. Latest version: ${fullVersion}\n\nChangelog:\n${changelog}`,
                 draft: false,
@@ -81,9 +93,9 @@ jobs:
               if (error.status === 404) {
                 // If it doesn't exist, create it
                 await github.rest.repos.createRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag_name: baseVersion,
+                  owner,
+                  repo,
+                  tag_name: tagName,
                   name: `Base Release ${baseVersion}`,
                   body: `This is the base release for ${baseVersion}. Latest version: ${fullVersion}\n\nChangelog:\n${changelog}`,
                   draft: false,
@@ -97,8 +109,6 @@ jobs:
       - name: Create Full Version Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            # Add any files you want to include in the release
           tag_name: ${{ steps.get_tag.outputs.TAG }}
           name: Release ${{ steps.get_tag.outputs.TAG }}
           body: |
