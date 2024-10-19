@@ -16,6 +16,7 @@ This GitHub Action automatically creates or updates a Pull Request from a develo
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
 | `openai_api_key` | OpenAI API Key | Yes | N/A |
+| `openai_model` | OpenAI model to use for generating PR descriptions | No | 'gpt-4o-mini' |
 | `github_token` | GitHub Personal Access Token with repo permissions | Yes | N/A |
 | `dev_branch` | Name of the development branch | No | 'dev' |
 
@@ -34,6 +35,7 @@ To use this action in your workflow, add the following step:
   uses: yuri-val/auto-pr-action@v1
   with:
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+    openai_model: gpt-4o  # Optional, defaults to 'gpt-4o-mini'
     github_token: ${{ secrets.GITHUB_TOKEN }}
     dev_branch: dev  # Optional, defaults to 'dev'
 ```
@@ -74,6 +76,44 @@ jobs:
 5. Uses OpenAI API to generate a descriptive PR content
 6. Creates a new PR or updates an existing one
 7. Adds relevant reviewers to the PR
+
+## GitHub Workflow Description (Development Workflow)
+
+### Branch Structure
+1. Default Branch: `main` or `master`
+2. Development Branch: `dev`
+3. Feature Branches: Multiple branches like `feature/new_awesome_feature`, `feature/new_files`, etc.
+
+### Workflow Steps
+
+![alt text](docs/dev_workflow_steps.png)
+
+1. **Branch Creation:**
+   - The `dev` branch is created from the default branch (`main` or `master`).
+   - `dev` always contains all commits from the default branch.
+
+2. **Feature Development:**
+   - Multiple feature branches are created from `dev`.
+   - Examples: `feature/new_awesome_feature`, `feature/new_files`, etc.
+   - Developers work on these feature branches.
+
+3. **Feature Integration:**
+   - When a feature is complete, it is merged into the `dev` branch.
+
+4. **Automated Pull Request Creation/Update:**
+   - On every merge to `dev` (or any push to `dev`):
+     - An automated process creates or updates a Pull Request from `dev` to the default branch (`main` or `master`).
+     - The Pull Request description is automatically generated using OpenAI's API.
+     - This ensures that the default branch is always aware of changes in `dev`.
+
+5. **Continuous Integration:**
+   - The `dev` branch continuously integrates new features.
+   - The automated PR to the default branch is kept up-to-date with these changes.
+
+6. **Review and Merge:**
+   - The auto-generated PR can be reviewed and eventually merged into the default branch when ready.
+
+This workflow allows for organized feature development, continuous integration into the `dev` branch, and an always up-to-date PR to the default branch with AI-generated descriptions for easy review and merging.
 
 ## License
 

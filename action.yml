@@ -10,6 +10,10 @@ inputs:
   openai_api_key:
     description: 'OpenAI API Key'
     required: true
+  openai_model:
+    description: 'OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo, etc.) https://platform.openai.com/docs/models'
+    required: false
+    default: 'gpt-4o-mini'
   github_token:
     description: 'GitHub (PAT) token with repo permissions'
     required: true
@@ -79,6 +83,7 @@ runs:
       id: generate_release_notes
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        OPENAI_MODEL: ${{ inputs.openai_model }}
         DIFF_OUTPUT: ${{ steps.get_diff.outputs.diff_output }}
       shell: bash
       run: |
@@ -91,7 +96,7 @@ runs:
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $OPENAI_API_KEY" \
           -d "{
-            \"model\": \"gpt-4o-mini\",
+            \"model\": \"${OPENAI_MODEL}\",
             \"messages\": [
               {
                 \"role\": \"system\",
@@ -109,6 +114,13 @@ runs:
             \"presence_penalty\": 0
           }")
 
+        # Check for errors in the response
+        error_message=$(echo "$response" | jq -r '.error.message // empty')
+        if [ -n "$error_message" ]; then
+          echo "Error from OpenAI API: $error_message"
+          exit 1
+        fi
+
         description=$(echo "$response" | jq -r '.choices[0].message.content')
         echo "description<<EOF" >> $GITHUB_OUTPUT
         echo "$description" >> $GITHUB_OUTPUT
@@ -125,7 +137,7 @@ runs:
       uses: actions/github-script@v6
       env:
         PR_TITLE: ${{ steps.set_release_title.outputs.title }}
-        PR_BODY: ${{ steps.generate_release_notes.outputs.description }}
+        PR_BODY: ${{ toJSON(steps.generate_release_notes.outputs.description) }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |
@@ -134,7 +146,7 @@ runs:
           const head = '${{ inputs.dev_branch }}';
           const base = '${{ steps.get_default_branch.outputs.branch }}';
           const title = process.env.PR_TITLE;
-          const body = process.env.PR_BODY;
+          const body = JSON.parse(process.env.PR_BODY);
           
           // Check if PR from dev to default branch already exists
           const { data: pulls } = await github.rest.pulls.list({
