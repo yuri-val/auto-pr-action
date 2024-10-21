@@ -1,8 +1,8 @@
 # action.yml
 
-name: 'Auto PR from dev to default'
-description: 'Creates or updates a PR from dev to the default branch, generates descriptions using OpenAI API, and adds reviewers.'
-author: 'Your Name'
+name: 'Auto PR: dev to main/master'
+description: 'Creates or updates a PR from development branch to the default (main or master) branch, generates descriptions using OpenAI API, and adds reviewers.'
+author: 'Yuri V'
 branding:
   icon: 'git-pull-request'
   color: 'green'
@@ -147,6 +147,20 @@ runs:
           const base = '${{ steps.get_default_branch.outputs.branch }}';
           const title = process.env.PR_TITLE;
           const body = JSON.parse(process.env.PR_BODY);
+          
+          // Check if there are any commits between base and head
+          const { data: comparison } = await github.rest.repos.compareCommits({
+            owner,
+            repo,
+            base,
+            head,
+          });
+          
+          if (comparison.commits.length === 0) {
+            console.log('No commits between ' + base + ' and ' + head + '. Skipping PR creation.');
+            core.setOutput('pr_number', 'none');
+            return;
+          }
           
           // Check if PR from dev to default branch already exists
           const { data: pulls } = await github.rest.pulls.list({
