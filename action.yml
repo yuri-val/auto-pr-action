@@ -1,7 +1,7 @@
 # action.yml
 
 name: 'Auto PR: dev to main/master'
-description: 'Creates or updates a PR from development branch to the default (main or master) branch, generates descriptions using OpenAI API, and adds reviewers.'
+description: 'Automates PR creation from dev to main/master, generates descriptions with OpenAI, and adds reviewers.'
 author: 'Yuri V'
 branding:
   icon: 'git-pull-request'
