@@ -62,12 +62,14 @@ jobs:
 
       - name: Create or Update Base Release
         uses: actions/github-script@v6
+        env:
+          CHANGELOG: ${{ toJSON(steps.generate_changelog.outputs.CHANGELOG) }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const baseVersion = `${{ steps.get_base_version.outputs.BASE_VERSION }}`;
             const fullVersion = `${{ steps.get_tag.outputs.TAG }}`;
-            const changelog = `${{ steps.generate_changelog.outputs.CHANGELOG }}`;
+            const changelog = JSON.parse(process.env.CHANGELOG);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const tagName = baseVersion;
