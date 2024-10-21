@@ -42,10 +42,12 @@ jobs:
         shell: bash
         run: |
           if [ -n "${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s" "${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}..${{ steps.get_tag.outputs.TAG }}")
+            CHANGELOG=$(git log --pretty=format:"- %B" "${{ steps.get_previous_tag.outputs.PREVIOUS_TAG }}..${{ steps.get_tag.outputs.TAG }}")
           else
-            CHANGELOG=$(git log --pretty=format:"- %s" "${{ steps.get_tag.outputs.TAG }}")
+            CHANGELOG=$(git log --pretty=format:"- %B" "${{ steps.get_tag.outputs.TAG }}")
           fi
+          # Remove any trailing newlines and add one at the end
+          CHANGELOG=$(echo "$CHANGELOG" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n\+$/\n/')
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
