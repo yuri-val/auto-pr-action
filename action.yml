@@ -68,7 +68,8 @@ runs:
           echo "--------------------------------------------"
           echo "Git diff between $branch_from and $branch_to"
           echo "============================================"
-          git diff origin/"$branch_from" origin/"$branch_to" || echo "No differences found"
+          # Exclude any *.pem files from the diff output
+          git diff origin/"$branch_from" origin/"$branch_to" -- . ':(exclude)*.pem' || echo "No differences found"
         } > "$output_file"
 
         if [ -s "$output_file" ]; then
