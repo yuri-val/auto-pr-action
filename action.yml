@@ -68,7 +68,7 @@ runs:
         --------------------------------------------
         Git diff between $DEFAULT_BRANCH and $DEV_BRANCH
         ============================================
-        $(git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" 2>/dev/null || echo "No differences found")
+        $(git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" -- . ':(exclude)*.pem' 2>/dev/null || echo "No differences found")
         DIFF_CONTENT
         )
 
