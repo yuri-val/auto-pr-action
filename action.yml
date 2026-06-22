@@ -61,58 +61,69 @@ runs:
 
         git fetch --all
 
-        diff_output=$(cat <<DIFF_CONTENT
-        Commits between $DEFAULT_BRANCH and $DEV_BRANCH:
-        ============================================
-        $(git log "origin/${DEFAULT_BRANCH}..origin/${DEV_BRANCH}" -- 2>/dev/null || echo "No commits found")
-        --------------------------------------------
-        Git diff between $DEFAULT_BRANCH and $DEV_BRANCH
-        ============================================
-        $(git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" -- . ':(exclude)*.pem' 2>/dev/null || echo "No differences found")
-        DIFF_CONTENT
-        )
+        # Write the diff to a file rather than a step output / env var. A large
+        # diff (hundreds of KB) exceeds the per-string execve limit
+        # (MAX_ARG_STRLEN, 128KB on Linux) when exported as an env var, which
+        # makes the next step fail to start with "Argument list too long".
+        diff_file="${RUNNER_TEMP}/auto_pr_diff.txt"
+        {
+          echo "Commits between $DEFAULT_BRANCH and $DEV_BRANCH:"
+          echo "============================================"
+          git log "origin/${DEFAULT_BRANCH}..origin/${DEV_BRANCH}" -- 2>/dev/null || echo "No commits found"
+          echo "--------------------------------------------"
+          echo "Git diff between $DEFAULT_BRANCH and $DEV_BRANCH"
+          echo "============================================"
+          git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" -- . ':(exclude)*.pem' 2>/dev/null || echo "No differences found"
+        } > "$diff_file"
 
-        if [ -n "$diff_output" ]; then
-          {
-            echo "diff_output<<GITHUB_OUTPUT_EOF"
-            echo "$diff_output"
-            echo "GITHUB_OUTPUT_EOF"
-          } >> "$GITHUB_OUTPUT"
-        else
-          echo "diff_output=No changes detected between $DEFAULT_BRANCH and $DEV_BRANCH" >> "$GITHUB_OUTPUT"
+        if [ ! -s "$diff_file" ]; then
+          printf 'No changes detected between %s and %s\n' "$DEFAULT_BRANCH" "$DEV_BRANCH" > "$diff_file"
         fi
+
+        # Cap the payload sent to the model so the request stays well within
+        # token limits regardless of how large the release diff grows.
+        max_bytes=100000
+        if [ "$(wc -c < "$diff_file")" -gt "$max_bytes" ]; then
+          head -c "$max_bytes" "$diff_file" > "${diff_file}.trunc"
+          printf '\n\n[diff truncated to %s bytes for the PR description]\n' "$max_bytes" >> "${diff_file}.trunc"
+          mv "${diff_file}.trunc" "$diff_file"
+        fi
+
+        echo "diff_file=${diff_file}" >> "$GITHUB_OUTPUT"
 
     - name: Generate release description using OpenAI API
       id: generate_release_notes
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
         OPENAI_MODEL: ${{ inputs.openai_model }}
-        DIFF_OUTPUT: ${{ steps.get_diff.outputs.diff_output }}
+        DIFF_FILE: ${{ steps.get_diff.outputs.diff_file }}
       shell: bash
       run: |
+        set -e
         prompt="**Instructions:**\n\nPlease generate a **Pull Request description** for the provided diff, following these guidelines:\n- Add appropriate emojis to the description.\n- Do **not** include the words \"Title\" and \"Description\" in your output.\n- Format your answer in **Markdown**."
 
-        escaped_prompt=$(echo "$prompt" | jq -Rs .)
-        escaped_diff=$(echo "$DIFF_OUTPUT" | jq -Rs .)
+        # Build the request body with jq, streaming the diff from a file via
+        # --rawfile. This keeps the (potentially large) diff off the command
+        # line and out of the environment entirely.
+        body_file="${RUNNER_TEMP}/openai_request.json"
+        jq -n \
+          --arg model "$OPENAI_MODEL" \
+          --arg prompt "$prompt" \
+          --rawfile diff "$DIFF_FILE" \
+          '{
+            model: $model,
+            messages: [
+              { role: "system", content: $prompt },
+              { role: "user", content: $diff }
+            ],
+            temperature: 0.7,
+            max_completion_tokens: 2048
+          }' > "$body_file"
 
         response=$(curl -sS --fail-with-body -X POST https://api.openai.com/v1/chat/completions \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $OPENAI_API_KEY" \
-          -d "{
-            \"model\": \"${OPENAI_MODEL}\",
-            \"messages\": [
-              {
-                \"role\": \"system\",
-                \"content\": ${escaped_prompt}
-              },
-              {
-                \"role\": \"user\",
-                \"content\": ${escaped_diff}
-              }
-            ],
-            \"temperature\": 0.7,
-            \"max_completion_tokens\": 2048
-          }") || {
+          -d @"$body_file") || {
           echo "::error::OpenAI API request failed"
           exit 1
         }
