@@ -81,8 +81,9 @@ runs:
         fi
 
         # Cap the payload sent to the model so the request stays well within
-        # token limits regardless of how large the release diff grows.
-        max_bytes=100000
+        # token limits regardless of how large the release diff grows. 1MB of
+        # UTF-8 is comfortably inside the model's 400k-token context window.
+        max_bytes=1000000
         if [ "$(wc -c < "$diff_file")" -gt "$max_bytes" ]; then
           head -c "$max_bytes" "$diff_file" > "${diff_file}.trunc"
           printf '\n\n[diff truncated to %s bytes for the PR description]\n' "$max_bytes" >> "${diff_file}.trunc"
