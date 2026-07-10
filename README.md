@@ -16,9 +16,10 @@ This GitHub Action automatically creates or updates a Pull Request from a develo
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
 | `openai_api_key` | OpenAI API Key | Yes | N/A |
-| `openai_model` | OpenAI model to use for generating PR descriptions | No | 'gpt-4o-mini' |
+| `openai_model` | OpenAI model to use for generating PR descriptions | No | 'gpt-5.6-luna' |
 | `github_token` | GitHub Personal Access Token with repo permissions | Yes | N/A |
 | `dev_branch` | Name of the development branch | No | 'dev' |
+| `max_diff_bytes` | Max size (bytes) of the diff payload sent to the model | No | '200000' |
 
 ## Outputs
 
@@ -35,7 +36,7 @@ To use this action in your workflow, add the following step:
   uses: yuri-val/auto-pr-action@v1
   with:
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-    openai_model: gpt-4o  # Optional, defaults to 'gpt-4o-mini'
+    openai_model: gpt-5.6-terra  # Optional, defaults to 'gpt-5.6-luna'
     github_token: ${{ secrets.GITHUB_TOKEN }}
     dev_branch: dev  # Optional, defaults to 'dev'
 ```

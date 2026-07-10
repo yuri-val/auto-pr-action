@@ -11,9 +11,9 @@ inputs:
     description: 'OpenAI API Key'
     required: true
   openai_model:
-    description: 'OpenAI model to use (e.g., gpt-5.4-mini, gpt-5.4, etc.) https://developers.openai.com/api/docs/guides/latest-model'
+    description: 'OpenAI model to use (e.g., gpt-5.6-luna, gpt-5.6-terra, etc.) https://developers.openai.com/api/docs/guides/latest-model'
     required: false
-    default: 'gpt-5.4-mini'
+    default: 'gpt-5.6-luna'
   github_token:
     description: 'GitHub (PAT) token with repo permissions'
     required: true
@@ -28,6 +28,7 @@ inputs:
 outputs:
   pr_number:
     description: 'The number of the pull request created or updated'
+    value: ${{ steps.create_pr.outputs.pr_number }}
 runs:
   using: 'composite'
   steps:
@@ -122,15 +123,33 @@ runs:
       shell: bash
       run: |
         set -e
-        prompt="**Instructions:**\n\nPlease generate a **Pull Request description** for the provided diff, following these guidelines:\n- Add appropriate emojis to the description.\n- Do **not** include the words \"Title\" and \"Description\" in your output.\n- Format your answer in **Markdown**."
+        # Lean system prompt tuned for GPT-5.6 (see
+        # https://developers.openai.com/api/docs/guides/latest-model): concise
+        # instructions outperform long rule lists and cut token usage.
+        prompt_file="${RUNNER_TEMP}/openai_prompt.txt"
+        cat > "$prompt_file" <<'PROMPT_EOF'
+        You write GitHub pull request descriptions for release PRs (dev -> main).
 
-        # Build the request body with jq, streaming the diff from a file via
-        # --rawfile. This keeps the (potentially large) diff off the command
-        # line and out of the environment entirely.
+        The user message contains the commit log, per-file diffstat, and unified diff between the branches. From it, produce the PR description body in GitHub Markdown:
+        - Start with a 1-2 sentence summary of the release.
+        - Group the changes into sections with emoji headings (e.g. ✨ Features, 🐛 Fixes, 🔧 Maintenance); include only sections that apply.
+        - Describe user-visible impact, not file-by-file mechanics.
+
+        Output only the description body — no title, no preamble, no code fences around the whole answer.
+        PROMPT_EOF
+
+        # Build the request body with jq, streaming the diff and prompt from
+        # files via --rawfile. This keeps the (potentially large) diff off the
+        # command line and out of the environment entirely.
+        #
+        # gpt-5.6-luna is a reasoning model: it rejects a custom temperature,
+        # and it spends completion tokens on reasoning before the visible
+        # answer — reasoning_effort "low" plus a 4096 budget keeps summaries
+        # fast while leaving headroom for large release diffs.
         body_file="${RUNNER_TEMP}/openai_request.json"
         jq -n \
           --arg model "$OPENAI_MODEL" \
-          --arg prompt "$prompt" \
+          --rawfile prompt "$prompt_file" \
           --rawfile diff "$DIFF_FILE" \
           '{
             model: $model,
@@ -138,7 +157,8 @@ runs:
               { role: "system", content: $prompt },
               { role: "user", content: $diff }
             ],
-            max_completion_tokens: 2048
+            reasoning_effort: "low",
+            max_completion_tokens: 4096
           }' > "$body_file"
 
         # Capture the body AND the HTTP status separately (no --fail-with-body):
