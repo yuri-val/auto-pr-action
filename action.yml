@@ -103,9 +103,20 @@ runs:
         # byte boundary, then drop any dangling partial UTF-8 sequence with
         # `iconv -c`: a multibyte char (Cyrillic, em-dash, arrows...) split
         # mid-sequence yields invalid UTF-8, which the API also rejects with 400.
+        #
+        # `-c` is not enough on its own. It drops *invalid* characters, but GNU
+        # iconv still exits 1 on an *incomplete* sequence at the end of input —
+        # "incomplete character or shift sequence at end of buffer" — which is
+        # exactly what a byte-boundary cut produces. Under the runner's
+        # `bash -eo pipefail` that killed the whole action (sc_pms, 2026-08-10).
+        # iconv writes the valid prefix before it gives up, so keep that output
+        # and ignore the status; fall back to the raw cut if it produced nothing.
         max_bytes="${MAX_DIFF_BYTES:-200000}"
         if [ "$(wc -c < "${diff_file}.full")" -gt "$max_bytes" ]; then
-          head -c "$max_bytes" "${diff_file}.full" | iconv -f UTF-8 -t UTF-8 -c > "$diff_file"
+          head -c "$max_bytes" "${diff_file}.full" > "${diff_file}.cut"
+          iconv -f UTF-8 -t UTF-8 -c < "${diff_file}.cut" > "$diff_file" 2>/dev/null || true
+          [ -s "$diff_file" ] || mv "${diff_file}.cut" "$diff_file"
+          rm -f "${diff_file}.cut"
           printf '\n\n[diff truncated to ~%s bytes for the PR description]\n' "$max_bytes" >> "$diff_file"
         else
           mv "${diff_file}.full" "$diff_file"
