@@ -58,9 +58,12 @@ on:
 jobs:
   auto-pr:
     runs-on: ubuntu-latest
+    # The PR is created with the PAT; the job token only needs to read the repo.
+    permissions:
+      contents: read
     steps:
       - name: Run Auto PR Action
-        uses: yuri-val/auto-pr-action@v1.0.0
+        uses: yuri-val/auto-pr-action@v1
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.PAT_TOKEN }}
@@ -76,7 +79,15 @@ jobs:
 4. Generates a diff between the dev and default branches
 5. Uses OpenAI API to generate a descriptive PR content
 6. Creates a new PR or updates an existing one
-7. Adds relevant reviewers to the PR
+7. Adds relevant reviewers to the PR — the commit authors (real users only; bots and the
+   organisation account are skipped), plus the repository owner for personal repositories
+
+### What is sent to OpenAI
+
+The commit log, the per-file diffstat and the diff between the branches, capped at
+`max_diff_bytes`. The contents of secret-bearing files — `.env*`, `*.pem`, `*.key`,
+`*.p12`/`*.pfx`/`*.jks`, SSH keys, `.npmrc`/`.netrc`, `credentials.yml*`/`secrets.yml*` and
+similar — are excluded from the diff; they appear in the diffstat by name only.
 
 ## GitHub Workflow Description (Development Workflow)
 

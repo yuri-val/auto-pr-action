@@ -15,9 +15,9 @@ We take the security of our GitHub Action seriously. If you have discovered a se
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them directly to us by sending an email to [INSERT SECURITY EMAIL]. If possible, encrypt your message with our PGP key (you can find it on our website or public key servers).
+Instead, please report them privately through GitHub: [Report a vulnerability](https://github.com/yuri-val/auto-pr-action/security/advisories/new) (Security tab → Advisories → Report a vulnerability).
 
-You should receive a response within 48 hours. If for some reason you do not, please follow up via email to ensure we received your original message.
+You should receive a response within 48 hours. If for some reason you do not, please add a comment to your private report to ensure we received your original message.
 
 Please include the following information in your report:
 
@@ -29,7 +29,7 @@ Please include the following information in your report:
 - Proof-of-concept or exploit code (if possible)
 - Impact of the issue, including how an attacker might exploit the issue
 
-We request that you contact us via the email address above and give the project contributors a chance to resolve the vulnerability and issue a new release prior to any public exposure; this helps protect the project's users, and provides them with a chance to upgrade and/or update in order to protect their applications.
+We request that you contact us via the private report above and give the project contributors a chance to resolve the vulnerability and issue a new release prior to any public exposure; this helps protect the project's users, and provides them with a chance to upgrade and/or update in order to protect their applications.
 
 ## Preferred Languages
 
