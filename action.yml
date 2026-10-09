@@ -11,7 +11,7 @@ inputs:
     description: 'Model provider: openai, claude or open-router. Falls back to the AI_PROVIDER environment variable, then openai.'
     required: false
   model:
-    description: 'Model to use with the provider. Falls back to AI_MODEL, then the provider default (openai: gpt-5.6-luna, claude: claude-haiku-5-5, open-router: deepseek/deepseek-v4.1-flash).'
+    description: 'Model to use with the provider. Falls back to AI_MODEL, then the provider default (openai: gpt-6-luna, claude: claude-haiku-5-5, open-router: deepseek/deepseek-v4.1-flash).'
     required: false
   openai_api_key:
     description: 'OpenAI API key (provider openai). Falls back to OPENAI_API_KEY.'
@@ -97,6 +97,20 @@ runs:
           ':(exclude)*credentials.yml*' ':(exclude)*secrets.yml*'
           ':(exclude)*credentials.json' ':(exclude)*secrets.json'
         )
+        # Build output and lockfiles are machine-written and often huge: a
+        # rebuilt dist/ bundle alone can fill max_diff_bytes and push the real
+        # changes out of the payload. They stay in the diffstat by name.
+        generated=(
+          ':(exclude,glob)**/dist/**'
+          ':(exclude,glob)**/*.min.js' ':(exclude,glob)**/*.min.css'
+          ':(exclude,glob)**/*.js.map' ':(exclude,glob)**/*.css.map'
+          ':(exclude,glob)**/package-lock.json' ':(exclude,glob)**/npm-shrinkwrap.json'
+          ':(exclude,glob)**/yarn.lock' ':(exclude,glob)**/pnpm-lock.yaml'
+          ':(exclude,glob)**/bun.lock' ':(exclude,glob)**/bun.lockb'
+          ':(exclude,glob)**/Gemfile.lock' ':(exclude,glob)**/composer.lock'
+          ':(exclude,glob)**/poetry.lock' ':(exclude,glob)**/Pipfile.lock'
+          ':(exclude,glob)**/uv.lock' ':(exclude,glob)**/Cargo.lock' ':(exclude,glob)**/go.sum'
+        )
 
         # Write the payload to a file rather than a step output / env var. A
         # large diff (hundreds of KB) exceeds the per-string execve limit
@@ -123,7 +137,7 @@ runs:
           echo "--------------------------------------------"
           echo "Git diff between $DEFAULT_BRANCH and $DEV_BRANCH (may be truncated):"
           echo "============================================"
-          git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" -- . "${sensitive[@]}" 2>/dev/null || echo "No differences found"
+          git diff "origin/${DEFAULT_BRANCH}" "origin/${DEV_BRANCH}" -- . "${sensitive[@]}" "${generated[@]}" 2>/dev/null || echo "No differences found"
         } > "${diff_file}.full"
 
         if [ ! -s "${diff_file}.full" ]; then
@@ -176,7 +190,7 @@ runs:
         # The provider name selects a script to run: only known names pass.
         case "$provider" in
           openai)
-            default_model="gpt-5.6-luna"
+            default_model="gpt-6-luna"
             api_key="${OPENAI_KEY_INPUT:-${OPENAI_API_KEY:-}}"
             key_hint="openai_api_key / OPENAI_API_KEY" ;;
           claude|anthropic)

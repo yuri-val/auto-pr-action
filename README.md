@@ -16,7 +16,7 @@ This GitHub Action automatically creates or updates a Pull Request from a develo
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
 | `provider` | `openai`, `claude` or `open-router` (env `AI_PROVIDER`) | No | 'openai' |
-| `model` | Model for the provider (env `AI_MODEL`) | No | openai: 'gpt-5.6-luna', claude: 'claude-haiku-5-5', open-router: 'deepseek/deepseek-v4.1-flash' |
+| `model` | Model for the provider (env `AI_MODEL`) | No | openai: 'gpt-6-luna', claude: 'claude-haiku-5-5', open-router: 'deepseek/deepseek-v4.1-flash' |
 | `openai_api_key` | OpenAI API key (env `OPENAI_API_KEY`) | For `openai` | N/A |
 | `anthropic_api_key` | Anthropic API key (env `ANTHROPIC_API_KEY` / `CLAUDE_API_KEY`) | For `claude` | N/A |
 | `anthropic_workspace_id` | Only for Anthropic keys not scoped to a workspace (env `ANTHROPIC_WORKSPACE_ID`) | No | N/A |
@@ -41,7 +41,7 @@ To use this action in your workflow, add the following step:
   uses: yuri-val/auto-pr-action@v1
   with:
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-    openai_model: gpt-5.6-terra  # Optional, defaults to 'gpt-5.6-luna'
+    model: gpt-6-luna  # Optional, the openai default
     github_token: ${{ secrets.GITHUB_TOKEN }}
     dev_branch: dev  # Optional, defaults to 'dev'
 ```
@@ -118,6 +118,10 @@ The commit log, the per-file diffstat and the diff between the branches, capped 
 `max_diff_bytes`. The contents of secret-bearing files — `.env*`, `*.pem`, `*.key`,
 `*.p12`/`*.pfx`/`*.jks`, SSH keys, `.npmrc`/`.netrc`, `credentials.yml*`/`secrets.yml*` and
 similar — are excluded from the diff; they appear in the diffstat by name only.
+Generated files — `dist/`, `*.min.js`/`*.min.css`, source maps and lockfiles
+(`package-lock.json`, `yarn.lock`, `Gemfile.lock`, `go.sum`, ...) — are left out of the diff too,
+so a rebuilt bundle cannot push the real changes out of the `max_diff_bytes` budget; they also
+stay in the diffstat.
 
 ## GitHub Workflow Description (Development Workflow)
 
